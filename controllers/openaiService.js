@@ -1,6 +1,5 @@
 // src/openaiService.js
 const fs = require('fs');
-const path = require('path');
 const { Configuration, OpenAIApi } = require('openai');
 const FormData = require('form-data');
 const axios = require('axios');
@@ -13,7 +12,7 @@ const openai = new OpenAIApi(configuration);
 
 const uploadFileToOpenAI = async (file) => {
   const form = new FormData();
-  form.append('file', fs.createReadStream(file.path), file.originalname);
+  form.append('file', file.buffer, file.originalname);
   form.append('purpose', 'answers');
 
   const response = await axios.post('https://api.openai.com/v1/files', form, {
@@ -26,18 +25,11 @@ const uploadFileToOpenAI = async (file) => {
   return response.data;
 };
 
-const extractFieldsWithOpenAI = async (files) => {
+const openaiGen = async (files) => {
   const uploadedFiles = await Promise.all(files.map(file => uploadFileToOpenAI(file)));
   const fileIds = uploadedFiles.map(file => file.id);
 
-  const prompt = `Extract the following fields from the documents:
-
-  - **Invoice Date:** (DD/MM/YY format)
-  - **Invoice Number:**
-  - **Total Amount:** (Include currency symbol if present)
-  - **Classification:** (Strictly "Medical", "Dental", or "Non-Medical")
-
-  Documents:`;
+  const prompt = `Based on the following files uploaded, read through all of them and identify common structures and headers used to write the documents and output a blank template for the user to fill in. After the user fills it in, generate a full document similar in word count and quality to the sample documents with the content taken from the user's input.`;
 
   const messages = [
     { role: "system", content: "You are a helpful assistant designed to output JSON." },
@@ -46,7 +38,7 @@ const extractFieldsWithOpenAI = async (files) => {
   ];
 
   const response = await openai.createChatCompletion({
-    model: "gpt-4",
+    model: "gpt-4-turbo",
     messages: messages,
     max_tokens: 500,
     temperature: 0,
@@ -66,4 +58,4 @@ const extractFieldsWithOpenAI = async (files) => {
   }
 };
 
-module.exports = { extractFieldsWithOpenAI };
+module.exports = { openaiGen };

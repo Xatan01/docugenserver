@@ -1,24 +1,21 @@
 // src/applicationService.js
-const express = require('express');
-const multer = require('multer');
-const openaiService = require('./openaiService');
+const { openaiGen } = require('./openaiService');
 
-const app = express();
-const upload = multer({ dest: 'uploads/' });
-
-app.use(express.json());
-
-app.post('/analyze', upload.array('files'), async (req, res) => {
+const analyzeDocuments = async (req, res) => {
   try {
     const files = req.files;
-    const results = await openaiService.extractFieldsWithOpenAI(files);
-    res.json(results);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+    if (!files || files.length === 0) {
+      return res.status(400).json({ message: 'No files uploaded' });
+    }
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+    const analysisResult = await openaiGen(files);
+    res.status(200).json(analysisResult);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error analyzing documents', error: error.message });
+  }
+};
+
+module.exports = {
+  analyzeDocuments,
+};
