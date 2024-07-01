@@ -2,7 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { analyzeDocuments } = require('../controllers/applicationService');
+const path = require('path');
+const { analyzeDocuments, generateDocument } = require('../controllers/applicationService');
 
 // Initialize multer for file upload
 const upload = multer({ 
@@ -25,5 +26,8 @@ function fileFilter(req, file, cb) {
 
 // Define the route for the document analysis API
 router.post('/analyze', upload.array('files'), analyzeDocuments);
+
+// Define the route for the document generation API
+router.post('/generate', generateDocument);
 
 module.exports = router;
