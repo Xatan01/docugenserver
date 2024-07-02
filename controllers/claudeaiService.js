@@ -8,6 +8,26 @@ console.log('ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? 'Set' : 'Not s
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
+// Function to transform Claude's response
+const transformClaudeResponse = (response) => {
+  const parsedResponse = JSON.parse(response);
+  const transformedResponse = {};
+
+  // Transform keys and filter out empty data
+  for (const [key, value] of Object.entries(parsedResponse)) {
+    const transformedKey = key.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase());
+    
+    if (Array.isArray(value) && value.length === 0) {
+      transformedResponse[transformedKey] = [];
+    } else if (typeof value === 'object' && Object.keys(value).length === 0) {
+      continue;
+    } else {
+      transformedResponse[transformedKey] = value;
+    }
+  }
+
+  return transformedResponse;
+};
 
 const extractTextFromFile = async (file) => {
   const buffer = file.buffer;
@@ -33,7 +53,7 @@ const claudeAnalyze = async (files) => {
     const prompt = `Analyze the following documents and identify common structures and headers. Output a blank template for the user to fill in, formatted as a JSON object. The template should include all major sections and subsections found in the documents. Provide only the JSON object without any additional text or explanation. Here are the document contents:\n\n${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}`;
 
     const response = await anthropic.messages.create({
-      model: "claude-3-sonnet-20240229",
+      model: "claude-3-5-sonnet-20240620",
       max_tokens: 4000,
       temperature: 0,
       messages: [
@@ -44,20 +64,14 @@ const claudeAnalyze = async (files) => {
       ]
     });
 
-    console.log('Full response from Claude:', JSON.stringify(response, null, 2));
     console.log('Claude\'s response content:', response.content[0].text);
 
-    // Extract JSON from the response
-    const jsonMatch = response.content[0].text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const jsonStr = jsonMatch[0];
-      return JSON.parse(jsonStr);
-    } else {
-      throw new Error('No valid JSON found in Claude\'s response');
-    }
+    const transformedResponse = transformClaudeResponse(response.content[0].text);
+
+    return transformedResponse;
   } catch (error) {
-    console.error('Error calling Claude API:', error.message);
-    throw new Error(`Failed to analyze documents with Claude API: ${error.message}`);
+    console.error('Error in claudeAnalyze:', error);
+    throw error;
   }
 };
 
