@@ -1,9 +1,9 @@
-// src/routes/routes.js
 const express = require('express');
-const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const { analyzeDocuments, generateDocument } = require('../controllers/applicationService');
+
+const router = express.Router();
 
 // Initialize multer for file upload
 const upload = multer({ 
@@ -13,14 +13,15 @@ const upload = multer({
 });
 
 function fileFilter(req, file, cb) {
-  const filetypes = /pdf|docx/;
-  const mimetype = filetypes.test(file.mimetype);
-  const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
-
-  if (mimetype && extname) {
-    return cb(null, true);
+  const allowedMimeTypes = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword'
+  ];
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
   } else {
-    cb(new Error("Only docx and PDFs are allowed"));
+    cb(new Error("Only docx and PDFs are allowed"), false);
   }
 }
 

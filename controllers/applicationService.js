@@ -16,7 +16,7 @@ const analyzeDocuments = async (req, res) => {
   }
 };
 
-const generateDocument = async (req, body, res) => {
+const generateDocument = async (req, res) => {
   try {
     const { structure, userInputs } = req.body;
     if (!structure || !userInputs) {

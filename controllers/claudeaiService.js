@@ -1,3 +1,4 @@
+// src/services/claudeaiService.js
 const Anthropic = require("@anthropic-ai/sdk");
 const mammoth = require("mammoth");
 const pdfParse = require('pdf-parse');
@@ -15,11 +16,43 @@ const extractTextFromFile = async (file) => {
     const data = await pdfParse(buffer);
     return data.text;
   } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    const result = await mammoth.extractRawText({ buffer });
+    const result = await mammoth.extractRawText({ buffer }, {
+      convertImage: mammoth.images.imgElement(function(image) {
+        return { src: image.read("base64").then(function(imageBuffer) {
+          return "data:" + image.contentType + ";base64," + imageBuffer;
+        }) };
+      }),
+      transformDocument: mammoth.transforms.paragraph(transformParagraph)
+    });
     return result.value;
   } else {
     throw new Error(`Unsupported file type: ${file.mimetype}`);
   }
+};
+
+const transformParagraph = (paragraph) => {
+  // Check if the paragraph contains a table
+  if (paragraph.children[0] && paragraph.children[0].type === 'table') {
+    return transformTable(paragraph.children[0]);
+  }
+  return paragraph;
+};
+
+const transformTable = (table) => {
+  // Transform table elements to a more structured format
+  return {
+    type: 'table',
+    children: table.children.map(row => ({
+      type: 'table-row',
+      children: row.children.map(cell => ({
+        type: 'table-cell',
+        children: cell.children.map(child => ({
+          type: child.type,
+          value: child.value
+        }))
+      }))
+    }))
+  };
 };
 
 const claudeAnalyze = async (files) => {
@@ -30,7 +63,15 @@ const claudeAnalyze = async (files) => {
     console.log('Sending request to Claude API...');
     console.log('API Key:', process.env.ANTHROPIC_API_KEY ? process.env.ANTHROPIC_API_KEY.substring(0, 5) + '...' : 'Not available');
     
-    const prompt = `Analyze the following documents and identify common structures and headers. Output a blank template for the user to fill in, formatted as a JSON object. The template should include all major sections and subsections found in the documents. Provide only the JSON object without any additional text or explanation. Here are the document contents:\n\n${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}`;
+    const prompt = `Analyze the following documents and create a comprehensive, structured template that captures all major sections, subsections, and key elements found in the documents. The template should be suitable for procurement documents and include sections such as Technical Specifications, Response to Invitation to Quote, Price Format, Requirement Specifications, and Conditions of Quotation.
+
+Output the template as a nested JSON object, with each major section as a top-level key, and nested objects or arrays for subsections and list items. Include placeholder text in square brackets for areas where user input would be required.
+
+Here are the document contents:
+
+${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}
+
+Provide only the JSON object without any additional text or explanation.`;
 
     const response = await anthropic.messages.create({
       model: "claude-3-sonnet-20240229",
@@ -45,7 +86,6 @@ const claudeAnalyze = async (files) => {
     });
 
     console.log('Full response from Claude:', JSON.stringify(response, null, 2));
-    console.log('Claude\'s response content:', response.content[0].text);
 
     // Extract JSON from the response
     const jsonMatch = response.content[0].text.match(/\{[\s\S]*\}/);
@@ -77,7 +117,7 @@ const claudeGenerate = async (structure, userInputs) => {
       ]
     });
 
-    return response.content[0].text;
+    return response.data;
   } catch (error) {
     console.error('Error calling Claude API:', error.message);
     throw new Error(`Failed to generate document with Claude API: ${error.message}`);
