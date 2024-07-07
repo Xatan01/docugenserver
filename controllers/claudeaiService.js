@@ -63,18 +63,22 @@ const claudeAnalyze = async (files) => {
     console.log('Sending request to Claude API...');
     console.log('API Key:', process.env.ANTHROPIC_API_KEY ? process.env.ANTHROPIC_API_KEY.substring(0, 5) + '...' : 'Not available');
     
-    const prompt = `Analyze the following documents and create a comprehensive, structured template that captures all major sections, subsections, and key elements found in the documents. The template should be suitable for procurement documents and include sections such as Technical Specifications, Response to Invitation to Quote, Price Format, Requirement Specifications, and Conditions of Quotation.
+    const prompt = `Analyze the following documents and create a comprehensive, structured template that captures all major sections, subsections, and key elements EXPLICITLY PRESENT in the documents (Which means not adding stuff). The template will be filled up with content by the user to for you to generate a new document similar to the sample documents.
 
-Output the template as a nested JSON object, with each major section as a top-level key, and nested objects or arrays for subsections and list items. Include placeholder text in square brackets for areas where user input would be required.
+Output the template as a nested JSON object. Follow these guidelines:
+1. Use camelCase for all keys.
+2. Group related items into objects or arrays as appropriate.
+3. Use descriptive key names that reflect the content they represent.
+4. For fields that require user input, use placeholder text in square brackets, e.g., "[Enter item description]".
+5. Include all relevant sections and subsections found in the input documents.
+6. Maintain a logical hierarchy that reflects the structure of procurement documents.
 
-Here are the document contents:
+Provide only the JSON object without any additional text or explanation. Here are the document contents:
 
-${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}
-
-Provide only the JSON object without any additional text or explanation.`;
+${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}`;
 
     const response = await anthropic.messages.create({
-      model: "claude-3-sonnet-20240229",
+      model: "claude-3-5-sonnet-20240620",
       max_tokens: 4000,
       temperature: 0,
       messages: [
