@@ -16,13 +16,14 @@
     "aws-sdk": "^2.1651.0",
     "axios": "^1.7.2",
     "cors": "^2.8.5",
+    "docx": "^8.5.0",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "form-data": "^4.0.0",
     "mammoth": "^1.8.0",
     "multer": "^1.4.5-lts.1",
-    "openai": "^3.3.0",
     "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.15.0",
     "word-extractor": "^1.0.4"
   },
   "devDependencies": {

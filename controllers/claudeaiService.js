@@ -1,74 +1,34 @@
-// src/services/claudeaiService.js
 const Anthropic = require("@anthropic-ai/sdk");
 const mammoth = require("mammoth");
 const pdfParse = require('pdf-parse');
 const WordExtractor = require("word-extractor");
+const PDFDocument = require('pdfkit');
 require('dotenv').config();
-
-console.log('ANTHROPIC_API_KEY:', process.env.ANTHROPIC_API_KEY ? 'Set' : 'Not set');
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 const extractTextFromFile = async (file) => {
-  console.log(`Attempting to extract text from file with mimetype: ${file.mimetype}`);
   const buffer = file.buffer;
   if (file.mimetype === 'application/pdf') {
-    console.log('Processing PDF file');
     const data = await pdfParse(buffer);
     return data.text;
   } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    console.log('Processing DOCX file');
-    const result = await mammoth.extractRawText({ buffer }, {
-      convertImage: mammoth.images.imgElement(function(image) {
-        return { src: image.read("base64").then(function(imageBuffer) {
-          return "data:" + image.contentType + ";base64," + imageBuffer;
-        }) };
-      }),
-      transformDocument: mammoth.transforms.paragraph(transformParagraph)
-    });
+    const result = await mammoth.extractRawText({ buffer });
     return result.value;
   } else if (file.mimetype === 'application/msword') {
-    console.log('Processing DOC file');
     const extractor = new WordExtractor();
     const extracted = await extractor.extract(buffer);
     return extracted.getBody();
   } else {
-    console.error(`Unsupported file type: ${file.mimetype}`);
     throw new Error(`Unsupported file type: ${file.mimetype}`);
   }
-};
-
-const transformParagraph = (paragraph) => {
-  // Check if the paragraph contains a table
-  if (paragraph.children[0] && paragraph.children[0].type === 'table') {
-    return transformTable(paragraph.children[0]);
-  }
-  return paragraph;
-};
-
-const transformTable = (table) => {
-  // Transform table elements to a more structured format
-  return {
-    type: 'table',
-    children: table.children.map(row => ({
-      type: 'table-row',
-      children: row.children.map(cell => ({
-        type: 'table-cell',
-        children: cell.children.map(child => ({
-          type: child.type,
-          value: child.value
-        }))
-      }))
-    }))
-  };
 };
 
 const simplifyStructure = (obj) => {
   if (Array.isArray(obj)) {
     if (obj.length > 0 && typeof obj[0] === 'string') {
-      // For arrays of strings (like confirmations), return a single string placeholder
       return "[Enter item]";
     }
     return [simplifyStructure(obj[0])];
@@ -84,11 +44,7 @@ const simplifyStructure = (obj) => {
 
 const claudeAnalyze = async (files) => {
   try {
-    console.log('Extracting text from files...');
     const textContents = await Promise.all(files.map(extractTextFromFile));
-    
-    console.log('Sending request to Claude API...');
-    console.log('API Key:', process.env.ANTHROPIC_API_KEY ? process.env.ANTHROPIC_API_KEY.substring(0, 5) + '...' : 'Not available');
     
     const prompt = `Analyze the following documents and create a comprehensive, structured template that captures all major sections, subsections, and key elements EXPLICITLY PRESENT in the documents. The template will be filled up with content by the user to generate a new document similar to the sample documents.
 
@@ -111,17 +67,9 @@ ${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}`;
       model: "claude-3-5-sonnet-20240620",
       max_tokens: 4000,
       temperature: 0,
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
+      messages: [{ role: "user", content: prompt }]
     });
 
-    console.log('Full response from Claude:', JSON.stringify(response, null, 2));
-
-    // Extract JSON from the response
     const jsonMatch = response.content[0].text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const jsonStr = jsonMatch[0];
@@ -136,27 +84,56 @@ ${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}`;
   }
 };
 
-const claudeGenerate = async (structure, userInputs) => {
-  const prompt = `Generate a full document based on the following structure and user inputs. Structure: ${JSON.stringify(structure)}. User Inputs: ${JSON.stringify(userInputs)}. The generated document should maintain a professional tone and formatting consistent with the original structure.`;
-
+const generateDocument = async (structure, userInputs) => {
   try {
-    const response = await anthropic.messages.create({
-      model: "claude-3-sonnet-20240229",
-      max_tokens: 4000,
-      temperature: 0,
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
-    });
+    const prompt = `Generate a full document based on the following structure and user inputs. 
+    Structure: ${JSON.stringify(structure)}
+    User Inputs: ${JSON.stringify(userInputs)}
+    
+    Instructions:
+    1. Use the provided structure as a template for the document.
+    2. Fill in the content using the user inputs.
+    3. Maintain a professional tone throughout the document.
+    4. Ensure proper formatting and organization based on the original structure.
+    5. Include tables where appropriate, based on the original structure.
+    6. If any required information is missing from the user inputs, use placeholder text or reasonable assumptions.
+    
+    Please provide the complete generated document content, including all text and table structures.`;
 
-    return response.content[0].text;
+    const response = await anthropic.messages.create({
+      model: "claude-3-5-sonnet-20240620",
+      max_tokens: 4000,
+      temperature: 0.2,
+      messages: [{ role: "user", content: prompt }]
+    });
+    console.log('claude response: ', response);
+
+    const generatedContent = response.content[0].text;
+    return generatedContent;
   } catch (error) {
-    console.error('Error calling Claude API:', error.message);
+    console.error('Error calling Claude API:', error);
     throw new Error(`Failed to generate document with Claude API: ${error.message}`);
   }
 };
 
-module.exports = { claudeAnalyze, claudeGenerate };
+const createPDF = async (content) => {
+  console.log("Generating PDF with content:", content);  // Log the content to see what is being written to the PDF.
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument();
+    const buffers = [];
+    doc.on('data', buffers.push.bind(buffers));
+    doc.on('end', () => {
+      const pdfData = Buffer.concat(buffers);
+      resolve(pdfData);
+    });
+    doc.on('error', (error) => {
+      reject(error);  
+    });
+    doc.text(content); 
+    doc.end();
+  });
+};
+
+
+
+module.exports = { claudeAnalyze, generateDocument, createPDF };

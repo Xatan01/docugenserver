@@ -1,34 +1,39 @@
 const express = require('express');
+const cors = require('cors');
 const multer = require('multer');
-const path = require('path');
-const { analyzeDocuments, generateDocument } = require('../controllers/applicationService');
+const { analyzeDocuments, generateDocumentPDF } = require('./controllers/applicationService');
 
-const router = express.Router();
+const app = express();
 
-// Initialize multer for file upload
+// Enable CORS for all routes
+app.use(cors());
+
+// Parse JSON bodies
+app.use(express.json());
+
+// Configure multer for file upload
 const upload = multer({ 
   storage: multer.memoryStorage(),
-  fileFilter,
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword'
+    ];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only docx and PDFs are allowed"), false);
+    }
+  },
   limits: { fileSize: 5 * 1024 * 1024 } // limit file size to 5MB
 });
 
-function fileFilter(req, file, cb) {
-  const allowedMimeTypes = [
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/msword'
-  ];
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Only docx and PDFs are allowed"), false);
-  }
-}
+// Define routes
+app.post('/analyze', upload.array('files'), analyzeDocuments);
+app.post('/generate', generateDocumentPDF);
 
-// Define the route for the document analysis API
-router.post('/analyze', upload.array('files'), analyzeDocuments);
-
-// Define the route for the document generation API
-router.post('/generate', generateDocument);
-
-module.exports = router;
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
