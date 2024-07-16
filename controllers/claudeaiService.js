@@ -58,6 +58,7 @@ Output the template as a nested JSON object. Follow these guidelines strictly:
 7. Maintain a logical hierarchy that reflects the structure of procurement documents.
 8. Do not repeat any structure or field. If a similar structure appears in multiple places, include it only once in the most appropriate location.
 9. For lists of confirmations or similar items, provide a single field with a placeholder text, allowing the user to add multiple entries later.
+10. MOST IMPORTANTLY, if multiple documents have the samne filed, return the same content of the field instead of a placeholder.
 
 Provide only the JSON object without any additional text or explanation. Ensure there are no repetitions in the structure. Here are the document contents:
 
