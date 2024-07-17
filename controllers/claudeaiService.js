@@ -98,6 +98,7 @@ const generateDocument = async (structure, userInputs) => {
     4. Ensure proper formatting and organization based on the original structure.
     5. Include tables where appropriate, based on the original structure.
     6. If any required information is missing from the user inputs, use placeholder text or reasonable assumptions.
+    7. For each field, make sure that the contents of each field are roughly similar in terms of word count to the average of the sample documents. If the user input is slightly longer or shorter, make resaonable changes based on user input.
     
     Please provide the complete generated document content, including all text and table structures.`;
 
