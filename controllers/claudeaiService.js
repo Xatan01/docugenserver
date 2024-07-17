@@ -58,7 +58,7 @@ Output the template as a nested JSON object. Follow these guidelines strictly:
 7. Maintain a logical hierarchy that reflects the structure of procurement documents.
 8. Do not repeat any structure or field. If a similar structure appears in multiple places, include it only once in the most appropriate location.
 9. For lists of confirmations or similar items, provide a single field with a placeholder text, allowing the user to add multiple entries later.
-10. MOST IMPORTANTLY, if multiple documents have the samne filed, return the same content of the field instead of a placeholder.
+10. MOST IMPORTANTLY, if multiple documents have the same field, return the same content of the field instead of a placeholder.
 
 Provide only the JSON object without any additional text or explanation. Ensure there are no repetitions in the structure. Here are the document contents:
 
@@ -71,19 +71,18 @@ ${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}`;
       messages: [{ role: "user", content: prompt }]
     });
 
-    const jsonMatch = response.content[0].text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const jsonStr = jsonMatch[0];
-      const parsedJson = JSON.parse(jsonStr);
-      return simplifyStructure(parsedJson);
-    } else {
-      throw new Error('No valid JSON found in Claude\'s response');
+    if (!response.content || response.content.length === 0 || !response.content[0].text) {
+      throw new Error('Invalid response from Claude API');
     }
+
+    const parsedJson = JSON.parse(response.content[0].text);
+    return simplifyStructure(parsedJson);
   } catch (error) {
     console.error('Error calling Claude API:', error.message);
     throw new Error(`Failed to analyze documents with Claude API: ${error.message}`);
   }
 };
+
 
 const generateDocument = async (structure, userInputs) => {
   try {
