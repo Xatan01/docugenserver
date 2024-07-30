@@ -11,18 +11,23 @@ const anthropic = new Anthropic({
 
 const extractTextFromFile = async (file) => {
   const buffer = file.buffer;
-  if (file.mimetype === 'application/pdf') {
-    const data = await pdfParse(buffer);
-    return data.text;
-  } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-    const result = await mammoth.extractRawText({ buffer });
-    return result.value;
-  } else if (file.mimetype === 'application/msword') {
-    const extractor = new WordExtractor();
-    const extracted = await extractor.extract(buffer);
-    return extracted.getBody();
-  } else {
-    throw new Error(`Unsupported file type: ${file.mimetype}`);
+  try {
+    if (file.mimetype === 'application/pdf') {
+      const data = await pdfParse(buffer);
+      return data.text;
+    } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value;
+    } else if (file.mimetype === 'application/msword') {
+      const extractor = new WordExtractor();
+      const extracted = await extractor.extract(buffer);
+      return extracted.getBody();
+    } else {
+      throw new Error(`Unsupported file type: ${file.mimetype}`);
+    }
+  } catch (error) {
+    console.error('Error extracting text from file:', error.message);
+    throw new Error(`Failed to extract text from file: ${error.message}`);
   }
 };
 
@@ -58,7 +63,7 @@ Output the template as a nested JSON object. Follow these guidelines strictly:
 7. Maintain a logical hierarchy that reflects the structure of procurement documents.
 8. Do not repeat any structure or field. If a similar structure appears in multiple places, include it only once in the most appropriate location.
 9. For lists of confirmations or similar items, provide a single field with a placeholder text, allowing the user to add multiple entries later.
-10. MOST IMPORTANTLY, if multiple documents have the same field, return the same content of the field instead of a placeholder.
+10. MOST IMPORTANTLY, if multiple documents have the same field, return the same content of the field instead of a placeholder. If multiple documents have the same content with different varying variables in between but are mostly similar, include the same content but allow the user to fill up the varying portion.
 
 Provide only the JSON object without any additional text or explanation. Ensure there are no repetitions in the structure. Here are the document contents:
 
@@ -82,7 +87,6 @@ ${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}`;
     throw new Error(`Failed to analyze documents with Claude API: ${error.message}`);
   }
 };
-
 
 const generateDocument = async (structure, userInputs) => {
   try {
@@ -134,7 +138,5 @@ const createPDF = async (content) => {
     doc.end();
   });
 };
-
-
 
 module.exports = { claudeAnalyze, generateDocument, createPDF };
