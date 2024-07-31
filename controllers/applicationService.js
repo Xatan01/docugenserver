@@ -19,14 +19,11 @@ const analyzeDocuments = async (req, res) => {
 const generateDocumentPDF = async (req, res) => {
   try {
     const { structure, userInputs } = req.body;
-    
     if (!structure || !userInputs) {
       return res.status(400).json({ message: 'Structure or user inputs missing' });
     }
-
     const generatedContent = await generateDocument(structure, userInputs);
     const pdfBuffer = await createPDF(generatedContent);
-    
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="generated_document.pdf"');
     res.send(pdfBuffer);

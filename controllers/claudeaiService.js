@@ -3,6 +3,7 @@ const mammoth = require("mammoth");
 const pdfParse = require('pdf-parse');
 const WordExtractor = require("word-extractor");
 const PDFDocument = require('pdfkit');
+
 require('dotenv').config();
 
 const anthropic = new Anthropic({
@@ -100,10 +101,13 @@ const generateDocument = async (structure, userInputs) => {
     3. Maintain a professional tone throughout the document.
     4. Ensure proper formatting and organization based on the original structure.
     5. Include tables where appropriate, based on the original structure.
-    6. If any required information is missing from the user inputs, use placeholder text or reasonable assumptions.
-    7. For each field, make sure that the contents of each field are roughly similar in terms of word count to the average of the sample documents. If the user input is slightly longer or shorter, make resaonable changes based on user input.
+    6. For each section, provide detailed, paragraph-style content instead of brief, list-like entries. For example, instead of "Duration: Onsite warranty of minimum 1 year", provide a full paragraph explaining the warranty terms.
+    7. If the user input for any section is insufficient or missing, supplement it with reasonable and relevant information to create a complete and coherent paragraph. The supplemented information should be consistent with typical procurement documents.
+    8. Aim to make each section's word count similar to the corresponding sections in the sample documents provided earlier.
+    9. For the "Vendor Offer" section and similar sections, provide a comprehensive paragraph explaining the terms and conditions, rather than a brief statement.
+    10. Ensure that all content is relevant to the procurement of headphones as specified in the original document.
     
-    Please provide the complete generated document content, including all text and table structures.`;
+    Please provide the complete generated document content, including all text and table structures. Format the document using markdown syntax for headers and tables.`;
 
     const response = await anthropic.messages.create({
       model: "claude-3-5-sonnet-20240620",
@@ -111,7 +115,10 @@ const generateDocument = async (structure, userInputs) => {
       temperature: 0.2,
       messages: [{ role: "user", content: prompt }]
     });
-    console.log('claude response: ', response);
+
+    if (!response.content || response.content.length === 0 || !response.content[0].text) {
+      throw new Error('Invalid response from Claude API');
+    }
 
     const generatedContent = response.content[0].text;
     return generatedContent;
@@ -122,20 +129,203 @@ const generateDocument = async (structure, userInputs) => {
 };
 
 const createPDF = async (content) => {
-  console.log("Generating PDF with content:", content);  // Log the content to see what is being written to the PDF.
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument();
-    const buffers = [];
-    doc.on('data', buffers.push.bind(buffers));
-    doc.on('end', () => {
-      const pdfData = Buffer.concat(buffers);
-      resolve(pdfData);
-    });
-    doc.on('error', (error) => {
-      reject(error);  
-    });
-    doc.text(content); 
-    doc.end();
+    try {
+      const doc = new PDFDocument({
+        size: 'A4',
+        margins: { top: 50, bottom: 50, left: 72, right: 72 },
+        bufferPages: true
+      });
+
+      const buffers = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => {
+        const pdfData = Buffer.concat(buffers);
+        resolve(pdfData);
+      });
+
+      doc.info.Title = 'Generated Document';
+      doc.info.Author = 'Your Application Name';
+
+      const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+      let currentY = doc.page.margins.top;
+      let lastElementType = null;
+
+      const standardLineHeight = 14;
+      const paragraphSpacing = standardLineHeight * 1.5;
+      const sectionSpacing = standardLineHeight * 2;
+
+      const addContent = (text, options = {}) => {
+        const { fontSize = 12, align = 'left', bold = false, underline = false, indent = 0 } = options;
+
+        // Add appropriate spacing based on the last element type
+        if (lastElementType === 'header') {
+          currentY += standardLineHeight;
+        } else if (lastElementType === 'paragraph' || lastElementType === 'list') {
+          currentY += paragraphSpacing;
+        } else if (lastElementType === 'table') {
+          currentY += sectionSpacing;
+        }
+
+        doc.fontSize(fontSize);
+        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica');
+
+        const textHeight = doc.heightOfString(text, { 
+          width: pageWidth - indent, 
+          align: align,
+          lineGap: 2
+        });
+
+        // Check if the text will fit on the current page
+        if (currentY + textHeight > doc.page.height - doc.page.margins.bottom) {
+          // If it doesn't fit, add a new page only if we're not at the top of a page
+          if (currentY > doc.page.margins.top) {
+            doc.addPage();
+            currentY = doc.page.margins.top;
+          }
+        }
+
+        doc.text(text, doc.page.margins.left + indent, currentY, {
+          width: pageWidth - indent,
+          align: align,
+          underline: underline,
+          lineGap: 2
+        });
+
+        currentY += textHeight;
+        lastElementType = 'paragraph';
+      };
+
+      const addTable = (tableData) => {
+        // Remove markdown formatting and empty cells
+        const cleanedData = tableData.map(row => 
+          row.filter(cell => cell.trim() !== '|')
+             .map(cell => cell.replace(/^[\s|]+|[\s|]+$/g, ''))
+        ).filter(row => row.length > 0);
+
+        const headers = cleanedData[0];
+        const rows = cleanedData.slice(2); // Skip the separator row
+        const cellPadding = 5;
+        const fontSize = 10;
+        doc.fontSize(fontSize);
+
+        // Calculate column widths based on content
+        const columnWidths = headers.map((header, index) => {
+          const headerWidth = doc.widthOfString(header) + 2 * cellPadding;
+          const maxContentWidth = Math.max(...rows.map(row => doc.widthOfString(row[index]))) + 2 * cellPadding;
+          return Math.min(Math.max(headerWidth, maxContentWidth), pageWidth / 2); // Limit to half page width
+        });
+
+        // Adjust column widths to fit page width
+        const tableWidth = columnWidths.reduce((sum, width) => sum + width, 0);
+        if (tableWidth > pageWidth) {
+          const scaleFactor = pageWidth / tableWidth;
+          columnWidths.forEach((width, index) => {
+            columnWidths[index] = width * scaleFactor;
+          });
+        }
+
+        // Function to draw a row
+        const drawRow = (rowData, isHeader = false) => {
+          const rowHeight = Math.max(...rowData.map(cell => 
+            doc.heightOfString(cell, { width: Math.min(...columnWidths) - 2 * cellPadding, lineGap: 2 })
+          )) + 2 * cellPadding;
+
+          if (currentY + rowHeight > doc.page.height - doc.page.margins.bottom) {
+            doc.addPage();
+            currentY = doc.page.margins.top;
+            if (!isHeader) {
+              drawRow(headers, true); // Redraw headers on new page
+            }
+          }
+
+          let startX = doc.page.margins.left;
+          rowData.forEach((cell, i) => {
+            doc.rect(startX, currentY, columnWidths[i], rowHeight).stroke();
+            doc.font(isHeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(fontSize)
+               .text(cell.replace(/<br>/g, '\n'), startX + cellPadding, currentY + cellPadding, {
+                 width: columnWidths[i] - 2 * cellPadding,
+                 align: isHeader ? 'center' : 'left',
+                 valign: 'top',
+                 lineGap: 2
+               });
+            startX += columnWidths[i];
+          });
+          currentY += rowHeight;
+        };
+
+        // Draw headers
+        drawRow(headers, true);
+
+        // Draw rows
+        rows.forEach(row => drawRow(row));
+
+        lastElementType = 'table';
+        currentY += sectionSpacing;
+      };
+
+      // Parse and add content
+      const lines = content.split('\n');
+      let inTable = false;
+      let tableData = [];
+
+      lines.forEach((line, index) => {
+        if (line.trim().startsWith('|') || line.trim().startsWith('+-')) {
+          if (!inTable) {
+            inTable = true;
+            tableData = [];
+          }
+          tableData.push(line.split('|').map(cell => cell.trim()).filter(cell => cell));
+        } else {
+          if (inTable) {
+            inTable = false;
+            addTable(tableData);
+            tableData = [];
+          }
+          // Handle non-table content
+          if (line.startsWith('# ') || line.startsWith('## ') || line.startsWith('### ')) {
+            if (index > 0) currentY += sectionSpacing;
+            
+            if (line.startsWith('# ')) {
+              addContent(line.slice(2), { fontSize: 18, align: 'center', bold: true });
+            } else if (line.startsWith('## ')) {
+              addContent(line.slice(3), { fontSize: 16, bold: true });
+            } else if (line.startsWith('### ')) {
+              addContent(line.slice(4), { fontSize: 14, bold: true });
+            }
+            lastElementType = 'header';
+          } else if (line.startsWith('- ')) {
+            addContent(`• ${line.slice(2)}`, { fontSize: 12, indent: 15 });
+            lastElementType = 'list';
+          } else if (line.trim() === '') {
+            // Skip empty lines, spacing is handled by addContent
+          } else {
+            addContent(line, { fontSize: 12 });
+          }
+        }
+      });
+
+      // Handle any remaining table data
+      if (inTable && tableData.length > 0) {
+        addTable(tableData);
+      }
+
+      // Add page numbers
+      const totalPages = doc.bufferedPageRange().count;
+      for (let i = 0; i < totalPages; i++) {
+        doc.switchToPage(i);
+        doc.font('Helvetica').fontSize(10).text(
+          `Page ${i + 1} of ${totalPages}`,
+          0,
+          doc.page.height - 30,
+          { align: 'center' }
+        );
+      }
+
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
   });
 };
 
