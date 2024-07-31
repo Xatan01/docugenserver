@@ -55,7 +55,7 @@ const claudeAnalyze = async (files) => {
 
 Output the template as a nested JSON object. Follow these guidelines strictly:
 1. Use camelCase for all keys.
-2. Group related items into objects or arrays as appropriate.
+2. Group related items into objects only (not array) as appropriate.
 3. Use descriptive key names that reflect the content they represent.
 4. For any repeated items, arrays, or lists, provide ONLY ONE example item. Do not use multiple items or numbering (e.g., item1, item2).
 5. For fields that require user input, use placeholder text in square brackets, e.g., "[Enter item description]".
@@ -75,7 +75,7 @@ ${textContents.join('\n\n---DOCUMENT SEPARATOR---\n\n')}`;
       temperature: 0,
       messages: [{ role: "user", content: prompt }]
     });
-
+    console.log("Claude response: ", response);
     if (!response.content || response.content.length === 0 || !response.content[0].text) {
       throw new Error('Invalid response from Claude API');
     }
