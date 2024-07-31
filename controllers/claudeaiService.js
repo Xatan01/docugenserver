@@ -104,9 +104,6 @@ const generateDocument = async (structure, userInputs) => {
     6. For each section, provide detailed, paragraph-style content instead of brief, list-like entries. For example, instead of "Duration: Onsite warranty of minimum 1 year", provide a full paragraph explaining the warranty terms.
     7. If the user input for any section is insufficient or missing, supplement it with reasonable and relevant information to create a complete and coherent paragraph. The supplemented information should be consistent with typical procurement documents.
     8. Aim to make each section's word count similar to the corresponding sections in the sample documents provided earlier.
-    9. For the "Vendor Offer" section and similar sections, provide a comprehensive paragraph explaining the terms and conditions, rather than a brief statement.
-    10. Ensure that all content is relevant to the procurement of headphones as specified in the original document.
-    
     Please provide the complete generated document content, including all text and table structures. Format the document using markdown syntax for headers and tables.`;
 
     const response = await anthropic.messages.create({
