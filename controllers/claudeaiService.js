@@ -310,18 +310,6 @@ const createPDF = async (content) => {
         addTable(tableData);
       }
 
-      // Add page numbers
-      const totalPages = doc.bufferedPageRange().count;
-      for (let i = 0; i < totalPages; i++) {
-        doc.switchToPage(i);
-        doc.font('Helvetica').fontSize(10).text(
-          `Page ${i + 1} of ${totalPages}`,
-          0,
-          doc.page.height - 30,
-          { align: 'center' }
-        );
-      }
-
       doc.end();
     } catch (error) {
       reject(error);
